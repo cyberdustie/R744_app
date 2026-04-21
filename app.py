@@ -878,7 +878,6 @@ except Exception as e:
     )
 
 user_inputs.append(val)
-    "Predict instantly"
     try:
         X_user = sx.transform(np.array(user_inputs).reshape(1, -1))
         y_pred_s = best_model.predict(X_user)
