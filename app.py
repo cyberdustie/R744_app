@@ -4,6 +4,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import streamlit as st
+import matplotlib.pyplot as plt
 import joblib
 
 from sklearn.model_selection import train_test_split, RandomizedSearchCV, KFold
@@ -21,204 +22,203 @@ import xgboost as xgb
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
-st.set_page_config(page_title="R744 Model", layout="wide")
+st.set_page_config(layout="wide", page_title="R744 Glass UI")
 
-# -------------------------
+# -----------------------------
+# GLASS CSS
+# -----------------------------
+st.markdown("""
+<style>
+body {
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    color: white;
+}
+
+.glass {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(12px);
+    border-radius: 12px;
+    padding: 18px;
+    border: 1px solid rgba(255,255,255,0.15);
+    margin-bottom: 15px;
+}
+
+.metric {
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+.label {
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
 # CONSTANTS
-# -------------------------
-INPUTS  = ["Dry Bulb Temperature", "Wet Bulb Temperature",
-           "Building Load", "RSH", "RSC"]
+# -----------------------------
+INPUTS  = ["Dry Bulb Temperature","Wet Bulb Temperature","Building Load","RSH","RSC"]
+OUTPUTS = ["W_comp","P_gc","P_e","m_s","m_rs","m_rp"]
 
-OUTPUTS = ["W_comp", "P_gc", "P_e", "m_s", "m_rs", "m_rp"]
-
-LOG_FILE = "prediction_log.csv"
-
-# -------------------------
-# LOAD DATA
-# -------------------------
-def load_excel(file):
-    xl = pd.ExcelFile(file)
-    return {s: xl.parse(s) for s in xl.sheet_names}
-
-def detect(df):
-    inputs = [c for c in INPUTS if c in df.columns]
-    outputs = [c for c in OUTPUTS if c in df.columns]
-    return inputs, outputs
-
-# -------------------------
-# PREPROCESS
-# -------------------------
-def preprocess(df, inputs, target):
-    df = df[inputs + [target]].dropna()
-
-    X = df[inputs].values
-    y = df[[target]].values
-
-    sx, sy = StandardScaler(), StandardScaler()
-    Xs = sx.fit_transform(X)
-    ys = sy.fit_transform(y).ravel()
-
-    Xtr, Xte, ytr, yte = train_test_split(Xs, ys, test_size=0.2, random_state=42)
-
-    return Xtr, Xte, ytr, yte, sx, sy
-
-# -------------------------
-# MODELS
-# -------------------------
+# -----------------------------
+# MODEL FACTORY
+# -----------------------------
 def get_model(name):
-    models = {
-        "Linear Regression": (
-            Pipeline([("lr", LinearRegression())]),
-            {"lr__fit_intercept": [True, False]}
-        ),
-
+    return {
+        "Linear": (LinearRegression(), {}),
         "Polynomial": (
-            Pipeline([
-                ("poly", PolynomialFeatures()),
-                ("lr", LinearRegression())
-            ]),
-            {"poly__degree": [2, 3]}
+            Pipeline([("poly", PolynomialFeatures()), ("lr", LinearRegression())]),
+            {"poly__degree":[2,3]}
         ),
+        "SVR": (SVR(), {"C":[1,10,100]}),
+        "KNN": (KNeighborsRegressor(), {"n_neighbors":[3,5,7]}),
+        "Decision Tree": (DecisionTreeRegressor(), {"max_depth":[None,5,10]}),
+        "Random Forest": (RandomForestRegressor(), {"n_estimators":[100,200]}),
+        "XGBoost": (xgb.XGBRegressor(), {"n_estimators":[100,200]}),
+        "LightGBM": (lgb.LGBMRegressor(), {"n_estimators":[100,200]}),
+        "CatBoost": (CatBoostRegressor(verbose=0), {"iterations":[100,200]}),
+        "ANN": (MLPRegressor(max_iter=500), {"hidden_layer_sizes":[(64,), (128,)]})
+    }[name]
 
-        "SVR": (
-            SVR(),
-            {"C":[1,10,100], "epsilon":[0.1,0.5]}
-        ),
-
-        "KNN": (
-            KNeighborsRegressor(),
-            {"n_neighbors":[3,5,7]}
-        ),
-
-        "Decision Tree": (
-            DecisionTreeRegressor(),
-            {"max_depth":[None,5,10]}
-        ),
-
-        "Random Forest": (
-            RandomForestRegressor(),
-            {"n_estimators":[100,200]}
-        ),
-
-        "XGBoost": (
-            xgb.XGBRegressor(),
-            {"n_estimators":[100,200]}
-        ),
-
-        "LightGBM": (
-            lgb.LGBMRegressor(),
-            {"n_estimators":[100,200]}
-        ),
-
-        "CatBoost": (
-            CatBoostRegressor(verbose=0),
-            {"iterations":[100,200]}
-        ),
-
-        "ANN": (
-            MLPRegressor(max_iter=500),
-            {"hidden_layer_sizes":[(64,), (128,)]}
-        )
-    }
-    return models[name]
-
-# -------------------------
-# TRAIN
-# -------------------------
-def train_model(model, params, X, y):
-    cv = KFold(n_splits=3, shuffle=True, random_state=42)
-
-    search = RandomizedSearchCV(
-        model, params, n_iter=10,
-        cv=cv, scoring="r2", n_jobs=-1
-    )
-
-    search.fit(X, y)
-    return search.best_estimator_
-
-# -------------------------
-# METRICS
-# -------------------------
-def evaluate(model, X, y, scaler_y):
-    pred = model.predict(X)
-    pred = scaler_y.inverse_transform(pred.reshape(-1,1)).ravel()
-    y_true = scaler_y.inverse_transform(y.reshape(-1,1)).ravel()
-
-    rmse = np.sqrt(mean_squared_error(y_true, pred))
-    r2 = r2_score(y_true, pred)
-
-    return rmse, r2
-
-# -------------------------
-# UI
-# -------------------------
-st.title("R-744 Surrogate Model")
+# -----------------------------
+# HEADER
+# -----------------------------
+st.title("❄️ R-744 Glass Dashboard")
 
 file = st.file_uploader("Upload Excel")
 
 if file:
-    sheets = load_excel(file)
-    sheet = st.selectbox("Sheet", list(sheets.keys()))
+    df = pd.read_excel(file)
 
-    df = sheets[sheet]
+    inputs = [c for c in INPUTS if c in df.columns]
+    outputs = [c for c in OUTPUTS if c in df.columns]
 
-    inputs, outputs = detect(df)
+    col1, col2 = st.columns(2)
+    with col1:
+        target = st.selectbox("Target", outputs)
+    with col2:
+        model_name = st.selectbox("Model", [
+            "Linear","Polynomial","SVR","KNN","Decision Tree",
+            "Random Forest","XGBoost","LightGBM","CatBoost","ANN"
+        ])
 
-    target = st.selectbox("Target", outputs)
-    model_name = st.selectbox("Model", list(get_model.__annotations__.keys()) if False else [
-        "Linear Regression","Polynomial","SVR","KNN",
-        "Decision Tree","Random Forest","XGBoost",
-        "LightGBM","CatBoost","ANN"
-    ])
+    if st.button("Train Model"):
 
-    if st.button("Train"):
-        Xtr, Xte, ytr, yte, sx, sy = preprocess(df, inputs, target)
+        df = df[inputs + [target]].dropna()
+
+        X = df[inputs].values
+        y = df[[target]].values
+
+        sx, sy = StandardScaler(), StandardScaler()
+        Xs = sx.fit_transform(X)
+        ys = sy.fit_transform(y).ravel()
+
+        Xtr, Xte, ytr, yte = train_test_split(Xs, ys, test_size=0.2)
 
         model, params = get_model(model_name)
 
-        best = train_model(model, params, Xtr, ytr)
+        search = RandomizedSearchCV(model, params, n_iter=10,
+                                    cv=KFold(3), n_jobs=-1)
+        search.fit(Xtr, ytr)
 
-        rmse, r2 = evaluate(best, Xte, yte, sy)
+        best = search.best_estimator_
 
-        st.success("Training Done")
-        st.write("RMSE:", rmse)
-        st.write("R2:", r2)
+        pred = best.predict(Xte)
 
-        st.session_state["model"] = best
-        st.session_state["sx"] = sx
-        st.session_state["sy"] = sy
-        st.session_state["inputs"] = inputs
+        y_true = sy.inverse_transform(yte.reshape(-1,1)).ravel()
+        y_pred = sy.inverse_transform(pred.reshape(-1,1)).ravel()
 
-# -------------------------
-# PREDICTION
-# -------------------------
+        st.session_state.update({
+            "model": best,
+            "sx": sx,
+            "sy": sy,
+            "inputs": inputs,
+            "y_true": y_true,
+            "y_pred": y_pred,
+            "errors": y_true - y_pred
+        })
+
+        st.success("Model Ready")
+
+# -----------------------------
+# DASHBOARD
+# -----------------------------
 if "model" in st.session_state:
-    st.subheader("Prediction")
 
-    vals = []
-    for col in st.session_state["inputs"]:
-        vals.append(st.number_input(col, value=0.0))
+    tabs = st.tabs(["📊 Metrics", "📈 Charts", "🎯 Prediction"])
 
-    if st.button("Predict"):
-        X = np.array(vals).reshape(1,-1)
-        Xs = st.session_state["sx"].transform(X)
+    # METRICS
+    with tabs[0]:
+        rmse = np.sqrt(mean_squared_error(
+            st.session_state["y_true"], st.session_state["y_pred"]))
+        r2 = r2_score(
+            st.session_state["y_true"], st.session_state["y_pred"])
 
-        pred = st.session_state["model"].predict(Xs)
-        pred = st.session_state["sy"].inverse_transform(pred.reshape(-1,1))[0][0]
+        c1, c2 = st.columns(2)
 
-        st.success(f"Prediction: {pred}")
+        with c1:
+            st.markdown(f"""
+            <div class="glass">
+                <div class="label">RMSE</div>
+                <div class="metric">{rmse:.4f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        row = {"time": str(datetime.datetime.now()), "prediction": pred}
-        pd.DataFrame([row]).to_csv(LOG_FILE, mode="a",
-                                  header=not os.path.exists(LOG_FILE),
-                                  index=False)
+        with c2:
+            st.markdown(f"""
+            <div class="glass">
+                <div class="label">R² Score</div>
+                <div class="metric">{r2:.4f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-# -------------------------
+    # CHARTS
+    with tabs[1]:
+        fig1, ax1 = plt.subplots()
+        ax1.scatter(st.session_state["y_true"], st.session_state["y_pred"])
+        ax1.set_title("Actual vs Predicted")
+        st.pyplot(fig1)
+
+        fig2, ax2 = plt.subplots()
+        ax2.hist(st.session_state["errors"], bins=25)
+        ax2.set_title("Residuals")
+        st.pyplot(fig2)
+
+        model = st.session_state["model"]
+        if hasattr(model, "feature_importances_"):
+            fig3, ax3 = plt.subplots()
+            imp = model.feature_importances_
+            idx = np.argsort(imp)
+            ax3.barh(np.array(st.session_state["inputs"])[idx], imp[idx])
+            ax3.set_title("Feature Importance")
+            st.pyplot(fig3)
+
+    # PREDICTION
+    with tabs[2]:
+        st.markdown('<div class="glass">', unsafe_allow_html=True)
+
+        vals = []
+        for col in st.session_state["inputs"]:
+            vals.append(st.number_input(col, value=0.0))
+
+        if st.button("Predict"):
+            X = np.array(vals).reshape(1,-1)
+            Xs = st.session_state["sx"].transform(X)
+
+            pred = st.session_state["model"].predict(Xs)
+            pred = st.session_state["sy"].inverse_transform(pred.reshape(-1,1))[0][0]
+
+            st.success(f"Prediction: {pred:.4f}")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# -----------------------------
 # DOWNLOAD
-# -------------------------
+# -----------------------------
 if "model" in st.session_state:
     buf = io.BytesIO()
     joblib.dump(st.session_state["model"], buf)
     buf.seek(0)
 
-    st.download_button("Download Model", buf, "model.pkl")
+    st.download_button("⬇ Download Model", buf, "model.pkl")
