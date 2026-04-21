@@ -22,36 +22,74 @@ import xgboost as xgb
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
-st.set_page_config(layout="wide", page_title="R744 Glass UI")
+st.set_page_config(layout="wide", page_title="R744 Animated UI")
 
 # -----------------------------
-# GLASS CSS
+# ADVANCED GLASS + ANIMATIONS
 # -----------------------------
 st.markdown("""
 <style>
+
+/* Background gradient animation */
 body {
-    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1c1c2b);
+    background-size: 400% 400%;
+    animation: gradientMove 15s ease infinite;
     color: white;
 }
 
+@keyframes gradientMove {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
+}
+
+/* Glass card */
 .glass {
-    background: rgba(255, 255, 255, 0.07);
-    backdrop-filter: blur(12px);
-    border-radius: 12px;
-    padding: 18px;
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(14px);
+    border-radius: 14px;
+    padding: 20px;
     border: 1px solid rgba(255,255,255,0.15);
-    margin-bottom: 15px;
+    transition: all 0.3s ease;
 }
 
+/* Hover glow */
+.glass:hover {
+    transform: translateY(-5px) scale(1.01);
+    box-shadow: 0 0 25px rgba(88,166,255,0.35);
+    border: 1px solid rgba(88,166,255,0.6);
+}
+
+/* Metric */
 .metric {
-    font-size: 1.8rem;
+    font-size: 2rem;
     font-weight: 600;
+    transition: all 0.3s ease;
 }
 
-.label {
-    font-size: 0.8rem;
-    opacity: 0.7;
+/* Fade-in animation */
+.fade-in {
+    animation: fadeIn 0.8s ease-in-out;
 }
+
+@keyframes fadeIn {
+    from {opacity: 0; transform: translateY(10px);}
+    to {opacity: 1; transform: translateY(0);}
+}
+
+/* Buttons glow */
+.stButton > button {
+    background: rgba(88,166,255,0.2);
+    border: 1px solid rgba(88,166,255,0.4);
+    color: white;
+    transition: all 0.25s ease;
+}
+.stButton > button:hover {
+    background: rgba(88,166,255,0.4);
+    box-shadow: 0 0 15px rgba(88,166,255,0.6);
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -62,7 +100,7 @@ INPUTS  = ["Dry Bulb Temperature","Wet Bulb Temperature","Building Load","RSH","
 OUTPUTS = ["W_comp","P_gc","P_e","m_s","m_rs","m_rp"]
 
 # -----------------------------
-# MODEL FACTORY
+# MODELS
 # -----------------------------
 def get_model(name):
     return {
@@ -84,7 +122,7 @@ def get_model(name):
 # -----------------------------
 # HEADER
 # -----------------------------
-st.title("❄️ R-744 Glass Dashboard")
+st.markdown("<h1 class='fade-in'>❄️ R-744 Animated Dashboard</h1>", unsafe_allow_html=True)
 
 file = st.file_uploader("Upload Excel")
 
@@ -159,16 +197,16 @@ if "model" in st.session_state:
 
         with c1:
             st.markdown(f"""
-            <div class="glass">
-                <div class="label">RMSE</div>
+            <div class="glass fade-in">
+                <div>RMSE</div>
                 <div class="metric">{rmse:.4f}</div>
             </div>
             """, unsafe_allow_html=True)
 
         with c2:
             st.markdown(f"""
-            <div class="glass">
-                <div class="label">R² Score</div>
+            <div class="glass fade-in">
+                <div>R² Score</div>
                 <div class="metric">{r2:.4f}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -196,7 +234,7 @@ if "model" in st.session_state:
 
     # PREDICTION
     with tabs[2]:
-        st.markdown('<div class="glass">', unsafe_allow_html=True)
+        st.markdown('<div class="glass fade-in">', unsafe_allow_html=True)
 
         vals = []
         for col in st.session_state["inputs"]:
