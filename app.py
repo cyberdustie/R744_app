@@ -878,7 +878,7 @@ except Exception as e:
     )
 
 user_inputs.append(val)
-    try:
+try:
         X_user = sx.transform(np.array(user_inputs).reshape(1, -1))
         y_pred_s = best_model.predict(X_user)
         y_pred_val = float(
@@ -913,7 +913,7 @@ user_inputs.append(val)
                     file_name="prediction_log.csv",
                     mime="text/csv",
                 )
-    except Exception as e:
+except Exception as e:
         st.error(f"Prediction error: {e}")
 
 st.markdown("---")
