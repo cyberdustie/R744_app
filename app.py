@@ -878,7 +878,6 @@ except Exception as e:
     )
 
 user_inputs.append(val)
-        user_inputs.append(val)
 
     """ Predict instantly """
     try:
