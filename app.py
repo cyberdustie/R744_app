@@ -829,15 +829,55 @@ else:
         flat_cols.extend(row_cols)
 
     for i, feat in enumerate(input_cols_active):
-        mn  = float(df_clean[feat].min())
-        mx  = float(df_clean[feat].max())
-        med = float(df_clean[feat].median())
-        step = (mx - mn) / 200 if mx != mn else 0.01
-        val = flat_cols[i].slider(
-            feat, min_value=mn, max_value=mx,
-            value=med, step=step,
-            format="%.3f"
-        )
+        import math
+
+col_data = df_clean[feat].dropna()
+
+# Fallback if column is empty
+if col_data.empty:
+    mn, mx, med = 0.0, 1.0, 0.5
+else:
+    mn  = float(col_data.min())
+    mx  = float(col_data.max())
+    med = float(col_data.median())
+
+# Fix NaN / Inf
+if not np.isfinite(mn): mn = 0.0
+if not np.isfinite(mx): mx = mn + 1.0
+if not np.isfinite(med): med = (mn + mx) / 2
+
+# Ensure valid range
+if mn == mx:
+    mx = mn + 1e-6
+
+# Clamp median into range
+med = max(mn, min(med, mx))
+
+# Safe step
+step = (mx - mn) / 200
+if not np.isfinite(step) or step <= 0:
+    step = max(abs(mx - mn) * 0.01, 1e-6)
+
+# Final slider (wrapped in try for safety)
+try:
+    val = flat_cols[i].slider(
+        feat,
+        min_value=float(mn),
+        max_value=float(mx),
+        value=float(med),
+        step=float(step),
+        format="%.3f"
+    )
+except Exception as e:
+    st.warning(f"⚠️ Slider fallback used for '{feat}' ({e})")
+    val = flat_cols[i].number_input(
+        feat,
+        value=float(med),
+        step=float(step),
+        format="%.3f"
+    )
+
+user_inputs.append(val)
         user_inputs.append(val)
 
     """ Predict instantly """
